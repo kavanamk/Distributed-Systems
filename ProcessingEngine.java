@@ -10,6 +10,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -53,13 +54,13 @@ public class ProcessingEngine {
         } finally {
             executorService.shutdown();
         }
-        printGlobalIndex();
+        
     }
 
     
 
     public void printGlobalIndex() {
-        int stop = 10000;
+        int stop = 50000;
         Map<String, WordInfo>  globalIndex=store.getGlobalIndex();
         // Create a copy of the entry set to iterate over
         globalIndexLock.lock();
@@ -114,49 +115,51 @@ public class ProcessingEngine {
         }
     }
     
-     public void searchFiles(String query) {
-        String[] terms = query.split(" AND ");
+    public void searchFiles(String query) {
+        query = query.toLowerCase();
+        String[] terms = query.split(" and ");
         List<FileOccurrences> filesWithAllTerms = new ArrayList<>();
-        Map<String, WordInfo> globalIndex=store.getGlobalIndex();
-
-        // Iterate over the global index to find files containing all terms
-        for (Map.Entry<String, WordInfo> entry : globalIndex.entrySet()) {
-            boolean containsAllTerms = true;
-            int totalOccurrences = 0;
-
-            // Check if the file contains all terms
-            for (String term : terms) {
-                if (!entry.getValue().getFilenameOccurrences().containsKey(term)) {
-                    containsAllTerms = false;
-                    break;
+        Map<String, WordInfo> globalIndex = store.getGlobalIndex();
+    
+        // Create a map to store the total occurrences of each file
+        Map<String, Integer> fileTotalOccurrences = new HashMap<>();
+    
+        // Iterate over the terms in the query
+        for (String term : terms) {
+            // Retrieve the WordInfo object for the current term
+            WordInfo wordInfo = globalIndex.get(term);
+            if (wordInfo != null) {
+                // Iterate over the filename occurrences for the current term
+                for (Map.Entry<String, Integer> entry : wordInfo.getFilenameOccurrences().entrySet()) {
+                    String filename = entry.getKey();
+                    int occurrences = entry.getValue();
+                    // Update the total occurrences for the current file
+                    fileTotalOccurrences.put(filename, occurrences);
                 }
-                totalOccurrences += entry.getValue().getFilenameOccurrences().get(term);
-            }
-
-            // If the file contains all terms, add it to the list
-            if (containsAllTerms) {
-                filesWithAllTerms.add(new FileOccurrences(entry.getKey(), totalOccurrences));
             }
         }
+    
+        // Sort the filenames based on the total occurrences
+        List<Map.Entry<String, Integer>> sortedFiles = new ArrayList<>(fileTotalOccurrences.entrySet());
+Collections.sort(sortedFiles, new Comparator<Map.Entry<String, Integer>>() {
+    @Override
+    public int compare(Map.Entry<String, Integer> entry1, Map.Entry<String, Integer> entry2) {
+        return entry2.getValue().compareTo(entry1.getValue());
+    }
+});
 
-        // Sort the files based on the total occurrences
-        filesWithAllTerms.sort(new Comparator<FileOccurrences>() {
-            @Override
-            public int compare(FileOccurrences fo1, FileOccurrences fo2) {
-                return Integer.compare(fo2.getTotalOccurrences(), fo1.getTotalOccurrences());
-            }
-        });
-
+    
         // Print the top 10 files
         int count = 0;
-        for (FileOccurrences fileOccurrences : filesWithAllTerms) {
+        for (Map.Entry<String, Integer> entry : sortedFiles) {
             if (count >= 10) {
                 break;
             }
-            System.out.println("File: " + fileOccurrences.getFilename() + ", Total Occurrences: " + fileOccurrences.getTotalOccurrences());
+            System.out.println("File: " + entry.getKey() + ", Total Occurrences: " + entry.getValue());
             count++;
         }
     }
+    
 
     public void stopWorkers() {
         System.out.println("Stopping threads");
