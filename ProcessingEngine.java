@@ -60,7 +60,7 @@ public class ProcessingEngine {
     
 
     public void printGlobalIndex() {
-        int stop = 50000;
+        int stop = 5000;
         Map<String, WordInfo>  globalIndex=store.getGlobalIndex();
         // Create a copy of the entry set to iterate over
         globalIndexLock.lock();
